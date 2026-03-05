@@ -22,22 +22,51 @@
         .border-eink { border: 3px solid #000; }
         .task-item.completing { opacity: 0.3; text-decoration: line-through; pointer-events: none; }
         ::-webkit-scrollbar { width: 0px; }
+        input::placeholder { color: #ccc; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.1em; }
     </style>
 </head>
 <body class="p-8 md:p-12 flex flex-col relative">
 
     <!-- Config Overlay -->
-    <div id="setup-overlay" class="fixed inset-0 bg-white z-50 p-8 flex flex-col items-center justify-center border-4 border-black">
+    <div id="setup-overlay" class="fixed inset-0 bg-white z-50 p-8 flex flex-col items-center justify-center border-4 border-black overflow-y-auto">
         <h1 class="text-4xl font-bold mb-8 text-center uppercase tracking-tighter">Dashboard Setup</h1>
+        
         <div class="space-y-4 w-full max-w-md">
-            <input type="text" id="owm-key" placeholder="OpenWeather API Key" class="w-full p-4 border-2 border-black text-xl">
-            <input type="text" id="client-id" placeholder="Google OAuth Client ID" class="w-full p-4 border-2 border-black text-xl">
-            <div class="flex gap-2">
-                <input type="text" id="lat" placeholder="Lat" class="w-1/2 p-4 border-2 border-black text-xl">
-                <input type="text" id="lon" placeholder="Lon" class="w-1/2 p-4 border-2 border-black text-xl">
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">Weather API Key</label>
+                <input type="text" id="owm-key" placeholder="OpenWeather API Key" class="w-full p-4 border-2 border-black text-xl">
             </div>
-            <button onclick="saveConfig()" class="w-full bg-black text-white p-4 text-xl font-bold uppercase tracking-widest">Start Dashboard</button>
-            <div id="url-feedback" class="text-xs text-center text-gray-500 font-mono mt-4 uppercase">Enter keys or use a setup URL</div>
+            
+            <div class="space-y-1">
+                <label class="text-xs font-bold uppercase text-gray-400">Google OAuth Client ID</label>
+                <input type="text" id="client-id" placeholder="Google OAuth Client ID" class="w-full p-4 border-2 border-black text-xl">
+            </div>
+
+            <div class="flex gap-2">
+                <div class="w-1/2 space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">Latitude</label>
+                    <input type="text" id="lat" placeholder="Lat" class="w-full p-4 border-2 border-black text-xl">
+                </div>
+                <div class="w-1/2 space-y-1">
+                    <label class="text-xs font-bold uppercase text-gray-400">Longitude</label>
+                    <input type="text" id="lon" placeholder="Lon" class="w-full p-4 border-2 border-black text-xl">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 pt-4">
+                <button onclick="saveConfig()" class="bg-black text-white p-4 text-xl font-bold uppercase tracking-widest hover:bg-gray-800">Start Local</button>
+                <button onclick="generateSetupUrl()" class="border-2 border-black p-4 text-xl font-bold uppercase tracking-widest hover:bg-gray-100">Get Link</button>
+            </div>
+
+            <div id="url-container" class="hidden mt-6 p-4 border-2 border-dashed border-black bg-gray-50">
+                <p class="text-xs font-bold uppercase mb-2">Setup URL for E-Ink Device:</p>
+                <textarea id="setup-url-output" readonly class="w-full text-[10px] font-mono p-2 border border-gray-300 bg-white break-all h-20 outline-none"></textarea>
+                <button onclick="copySetupUrl()" class="mt-2 text-xs font-bold uppercase underline">Copy Link</button>
+            </div>
+
+            <div class="text-[10px] text-center text-gray-400 font-mono mt-4 uppercase">
+                Note: "Get Link" encodes your keys into the URL. Do not share your setup link publicly.
+            </div>
         </div>
     </div>
 
@@ -78,9 +107,17 @@
         </section>
     </main>
 
+    <!-- Bottom Controls -->
     <button onclick="refreshAll()" class="absolute bottom-10 left-10 w-20 h-20 bg-white border-4 border-black flex items-center justify-center rounded-full shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] z-40" title="Refresh">
         <i data-lucide="refresh-cw" class="w-8 h-8"></i>
     </button>
+
+    <div id="battery-status" class="absolute bottom-10 right-10 flex items-center gap-3 text-3xl font-bold uppercase tracking-widest">
+        <span id="battery-percent">--%</span>
+        <div id="battery-icon-container">
+            <i data-lucide="battery" class="w-12 h-12"></i>
+        </div>
+    </div>
 
     <script>
         let config = { owmKey: '', clientId: '', lat: 0, lon: 0 };
@@ -94,11 +131,16 @@
             const hash = window.location.hash;
             if (hash.startsWith('#config=')) {
                 try {
-                    const decoded = JSON.parse(atob(hash.split('#config=')[1]));
+                    const encodedStr = hash.split('#config=')[1];
+                    const decoded = JSON.parse(atob(encodedStr));
                     localStorage.setItem('einkConfig', JSON.stringify(decoded));
+                    // Clear the hash for a clean URL
                     window.history.replaceState(null, null, window.location.pathname);
                     return decoded;
-                } catch (e) { console.error("URL Config Error:", e); }
+                } catch (e) { 
+                    console.error("URL Config Error:", e);
+                    return null;
+                }
             }
             return null;
         }
@@ -112,7 +154,7 @@
                 setInterval(updateClock, 30000);
                 fetchWeather();
                 setInterval(fetchWeather, 1800000);
-                // Trigger check if GSI already loaded
+                updateBattery();
                 checkInitStatus();
             } else {
                 fillConfigInputs();
@@ -120,21 +162,56 @@
         };
 
         function fillConfigInputs() {
-            document.getElementById('owm-key').value = config.owmKey || '';
-            document.getElementById('client-id').value = config.clientId || '';
-            document.getElementById('lat').value = config.lat || '';
-            document.getElementById('lon').value = config.lon || '';
+            const saved = JSON.parse(localStorage.getItem('einkConfig') || '{}');
+            document.getElementById('owm-key').value = saved.owmKey || '';
+            document.getElementById('client-id').value = saved.clientId || '';
+            document.getElementById('lat').value = saved.lat || '';
+            document.getElementById('lon').value = saved.lon || '';
         }
 
         function saveConfig() {
             const newConfig = {
-                owmKey: document.getElementById('owm-key').value,
-                clientId: document.getElementById('client-id').value,
-                lat: document.getElementById('lat').value,
-                lon: document.getElementById('lon').value
+                owmKey: document.getElementById('owm-key').value.trim(),
+                clientId: document.getElementById('client-id').value.trim(),
+                lat: document.getElementById('lat').value.trim(),
+                lon: document.getElementById('lon').value.trim()
             };
+            if (!newConfig.clientId) {
+                alert("Client ID is required for Google integration.");
+                return;
+            }
             localStorage.setItem('einkConfig', JSON.stringify(newConfig));
             location.reload();
+        }
+
+        function generateSetupUrl() {
+            const configData = {
+                owmKey: document.getElementById('owm-key').value.trim(),
+                clientId: document.getElementById('client-id').value.trim(),
+                lat: document.getElementById('lat').value.trim(),
+                lon: document.getElementById('lon').value.trim()
+            };
+            
+            if (!configData.clientId) {
+                alert("Please fill in at least the Client ID.");
+                return;
+            }
+
+            const encoded = btoa(JSON.stringify(configData));
+            // Ensure we get the current base URL without existing hashes
+            const baseUrl = window.location.href.split('#')[0];
+            const finalUrl = `${baseUrl}#config=${encoded}`;
+            
+            document.getElementById('setup-url-output').value = finalUrl;
+            document.getElementById('url-container').classList.remove('hidden');
+        }
+
+        function copySetupUrl() {
+            const copyText = document.getElementById("setup-url-output");
+            copyText.select();
+            copyText.setSelectionRange(0, 99999);
+            document.execCommand("copy");
+            alert("Link copied! Send this link to your E-Ink device.");
         }
 
         // --- GOOGLE AUTH ENGINE ---
@@ -273,7 +350,32 @@
             return map[code.substring(0,2)] || 'cloud';
         }
 
-        function refreshAll() { loadDashboardData(); fetchWeather(); }
+        async function updateBattery() {
+            if ('getBattery' in navigator) {
+                const battery = await navigator.getBattery();
+                const updateUI = () => {
+                    const level = Math.round(battery.level * 100);
+                    document.getElementById('battery-percent').textContent = level + '%';
+                    
+                    let iconName = 'battery';
+                    if (battery.charging) iconName = 'battery-charging';
+                    else if (battery.level <= 0.1) iconName = 'battery-low';
+                    else if (battery.level >= 0.9) iconName = 'battery-full';
+                    else if (battery.level <= 0.5) iconName = 'battery-medium';
+
+                    document.getElementById('battery-icon-container').innerHTML = `<i data-lucide="${iconName}" class="w-12 h-12"></i>`;
+                    lucide.createIcons();
+                };
+                
+                updateUI();
+                battery.addEventListener('levelchange', updateUI);
+                battery.addEventListener('chargingchange', updateUI);
+            } else {
+                document.getElementById('battery-status').style.display = 'none';
+            }
+        }
+
+        function refreshAll() { loadDashboardData(); fetchWeather(); updateBattery(); }
     </script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
