@@ -3,18 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dashboard</title>
+    <title>E-Ink Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://apis.google.com/js/api.js"></script>
     <script src="https://accounts.google.com/gsi/client"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Playfair+Display:ital@1&display=swap');
-
-        *, *::before, *::after {
-            box-sizing: border-box;
-        }
-
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
         body {
             background-color: #ffffff;
             color: #000000;
@@ -23,47 +18,26 @@
             height: 100vh;
             margin: 0;
             overflow: hidden;
-            -webkit-font-smoothing: antialiased;
         }
-
-        .border-eink { border: 2px solid #000; }
-        .bg-eink-gray { background-color: #f0f0f0; }
+        .border-eink { border: 3px solid #000; }
+        .task-item.completing { opacity: 0.3; text-decoration: line-through; pointer-events: none; }
         ::-webkit-scrollbar { width: 0px; }
-
-        .focus-box {
-            box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
-        }
-
-        .task-item {
-            transition: opacity 0.3s ease, transform 0.3s ease;
-        }
-        .task-item.completing {
-            opacity: 0.3;
-            text-decoration: line-through;
-            pointer-events: none;
-        }
     </style>
 </head>
 <body class="p-8 md:p-12 flex flex-col relative">
 
     <!-- Config Overlay -->
     <div id="setup-overlay" class="fixed inset-0 bg-white z-50 p-8 flex flex-col items-center justify-center border-4 border-black">
-        <h1 class="text-4xl font-bold mb-8 text-center">Dashboard Sign in</h1>
+        <h1 class="text-4xl font-bold mb-8 text-center uppercase tracking-tighter">Dashboard Setup</h1>
         <div class="space-y-4 w-full max-w-md">
             <input type="text" id="owm-key" placeholder="OpenWeather API Key" class="w-full p-4 border-2 border-black text-xl">
             <input type="text" id="client-id" placeholder="Google OAuth Client ID" class="w-full p-4 border-2 border-black text-xl">
             <div class="flex gap-2">
-                <input type="text" id="lat" placeholder="Lat (e.g. 51.5)" class="w-1/2 p-4 border-2 border-black text-xl">
-                <input type="text" id="lon" placeholder="Lon (e.g. -0.12)" class="w-1/2 p-4 border-2 border-black text-xl">
+                <input type="text" id="lat" placeholder="Lat" class="w-1/2 p-4 border-2 border-black text-xl">
+                <input type="text" id="lon" placeholder="Lon" class="w-1/2 p-4 border-2 border-black text-xl">
             </div>
             <button onclick="saveConfig()" class="w-full bg-black text-white p-4 text-xl font-bold uppercase tracking-widest">Start Dashboard</button>
-            
-            <div class="pt-4 border-t-2 border-black flex flex-col gap-2">
-                <button onclick="generateConfigURL()" class="w-full bg-white text-black border-2 border-black p-4 text-sm font-bold uppercase tracking-widest">Generate Setup URL</button>
-                <div id="url-feedback" class="text-xs break-all text-center text-gray-500 font-mono">For easy entry on E-Ink devices</div>
-            </div>
-
-            <button onclick="clearSavedData()" class="w-full text-red-600 p-2 text-xs font-bold uppercase mt-8 opacity-50">Clear Saved Keys</button>
+            <div id="url-feedback" class="text-xs text-center text-gray-500 font-mono mt-4 uppercase">Enter keys or use a setup URL</div>
         </div>
     </div>
 
@@ -71,201 +45,99 @@
     <header class="flex justify-between items-start mb-8">
         <div class="flex flex-col">
             <div id="clock" class="text-9xl font-light tracking-tighter">00:00</div>
-            <div id="date" class="text-4xl text-gray-600 mt-2 uppercase tracking-widest">Monday, January 1st</div>
+            <div id="date" class="text-4xl text-gray-600 mt-2 uppercase tracking-widest">--</div>
         </div>
-
         <div id="weather-container" class="text-right flex items-center gap-8">
             <div class="flex flex-col items-end">
                 <span id="temp" class="text-8xl font-normal">--°</span>
-                <span id="condition" class="text-3xl uppercase tracking-wider text-gray-600">Syncing...</span>
+                <span id="condition" class="text-3xl uppercase tracking-wider text-gray-600 italic">Syncing...</span>
             </div>
-            <div id="weather-icon" class="flex items-center justify-center">
-                <i data-lucide="cloud" class="w-24 h-24 stroke-[1.5]"></i>
-            </div>
+            <div id="weather-icon"><i data-lucide="cloud" class="w-24 h-24"></i></div>
         </div>
     </header>
 
     <main class="grid grid-cols-12 gap-12 flex-grow overflow-hidden pb-4">
+        <!-- Agenda Section -->
         <section class="col-span-7 flex flex-col h-full overflow-hidden">
             <h2 class="text-3xl font-bold uppercase border-b-4 border-black pb-2 mb-6 shrink-0">Agenda</h2>
             <div id="calendar-list" class="flex-grow overflow-y-auto pr-4 space-y-6 text-2xl">
-                <div class="text-gray-400 italic">Please authorize Google access.</div>
+                <div class="text-gray-400 italic">Loading events...</div>
             </div>
-            <button id="auth-btn" onclick="handleAuthClick()" class="hidden mt-4 p-6 border-4 border-black font-bold uppercase text-xl hover:bg-black hover:text-white shrink-0">Sign in with Google</button>
+            <!-- Auth Button -->
+            <button id="auth-btn" onclick="handleAuthClick()" class="hidden mt-4 p-6 border-4 border-black font-bold uppercase text-2xl bg-white hover:bg-black hover:text-white flex items-center justify-center gap-4">
+                <i data-lucide="log-in"></i> Authorize Google
+            </button>
         </section>
 
+        <!-- Tasks Section -->
         <section class="col-span-5 flex flex-col h-full overflow-hidden relative">
             <h2 class="text-3xl font-bold uppercase border-b-4 border-black pb-2 mb-6 shrink-0">Tasks</h2>
             <div id="tasks-list" class="flex-grow overflow-y-auto pr-4 space-y-4 pb-4">
                 <div class="text-xl text-gray-400 italic">Waiting for sync...</div>
             </div>
-
-            <div class="mt-4 p-6 bg-white border-4 border-black focus-box shrink-0 flex flex-col h-56">
-                <div class="text-sm font-bold uppercase tracking-widest mb-2 flex justify-between items-center text-gray-500">
-                    <span>Daily Focus</span>
-                    <i data-lucide="target" class="w-5 h-5"></i>
-                </div>
-                <textarea id="daily-focus" oninput="saveFocus()" class="w-full flex-grow bg-transparent border-none resize-none outline-none text-3xl font-['Playfair_Display'] italic text-black placeholder-gray-300 leading-tight" placeholder="What is your main priority today?"></textarea>
-            </div>
         </section>
     </main>
 
-    <button onclick="refreshAll()" class="absolute bottom-10 left-10 w-20 h-20 bg-white border-4 border-black flex items-center justify-center hover:bg-black hover:text-white rounded-full shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] z-40 transition-none" title="Refresh Dashboard">
-        <i data-lucide="refresh-cw" class="w-8 h-8 stroke-[2.5]"></i>
+    <button onclick="refreshAll()" class="absolute bottom-10 left-10 w-20 h-20 bg-white border-4 border-black flex items-center justify-center rounded-full shadow-[6px_6px_0px_0px_rgba(0,0,0,1)] z-40" title="Refresh">
+        <i data-lucide="refresh-cw" class="w-8 h-8"></i>
     </button>
 
     <script>
         let config = { owmKey: '', clientId: '', lat: 0, lon: 0 };
         let tokenClient;
-        let gapiLoadedFlag = false;
-        let gisLoadedFlag = false;
-
-        const storage = {
-            set: (key, value) => {
-                try {
-                    localStorage.setItem(key, value);
-                } catch (e) {
-                    window[key] = value;
-                }
-            },
-            get: (key) => {
-                try {
-                    return localStorage.getItem(key);
-                } catch (e) {
-                    return window[key] || null;
-                }
-            },
-            remove: (key) => {
-                try {
-                    localStorage.removeItem(key);
-                } catch (e) {
-                    delete window[key];
-                }
-            }
-        };
+        let gapiInited = false;
+        let gisInited = false;
 
         lucide.createIcons();
 
-        // New Helper to parse config from URL hash
         function parseHashConfig() {
             const hash = window.location.hash;
             if (hash.startsWith('#config=')) {
                 try {
-                    const base64 = hash.split('#config=')[1];
-                    const decoded = JSON.parse(atob(base64));
-                    // Update storage and local config
-                    storage.set('einkConfig', JSON.stringify(decoded));
-                    // Clear hash to prevent infinite loops/messy URLs
+                    const decoded = JSON.parse(atob(hash.split('#config=')[1]));
+                    localStorage.setItem('einkConfig', JSON.stringify(decoded));
                     window.history.replaceState(null, null, window.location.pathname);
                     return decoded;
-                } catch (e) {
-                    console.error("Failed to parse URL config", e);
-                }
+                } catch (e) { console.error("URL Config Error:", e); }
             }
             return null;
         }
 
-        function generateConfigURL() {
-            const curConfig = {
+        window.onload = () => {
+            const saved = parseHashConfig() || JSON.parse(localStorage.getItem('einkConfig') || 'null');
+            if (saved && saved.clientId) {
+                config = saved;
+                document.getElementById('setup-overlay').classList.add('hidden');
+                updateClock();
+                setInterval(updateClock, 30000);
+                fetchWeather();
+                setInterval(fetchWeather, 1800000);
+                // Trigger check if GSI already loaded
+                checkInitStatus();
+            } else {
+                fillConfigInputs();
+            }
+        };
+
+        function fillConfigInputs() {
+            document.getElementById('owm-key').value = config.owmKey || '';
+            document.getElementById('client-id').value = config.clientId || '';
+            document.getElementById('lat').value = config.lat || '';
+            document.getElementById('lon').value = config.lon || '';
+        }
+
+        function saveConfig() {
+            const newConfig = {
                 owmKey: document.getElementById('owm-key').value,
                 clientId: document.getElementById('client-id').value,
                 lat: document.getElementById('lat').value,
                 lon: document.getElementById('lon').value
             };
-            
-            if (!curConfig.owmKey || !curConfig.clientId) {
-                document.getElementById('url-feedback').innerText = "Enter Keys First!";
-                return;
-            }
-
-            const base64 = btoa(JSON.stringify(curConfig));
-            const url = `${window.location.origin}${window.location.pathname}#config=${base64}`;
-            
-            // Attempt to copy to clipboard
-            const el = document.createElement('textarea');
-            el.value = url;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-
-            document.getElementById('url-feedback').innerText = "URL Copied to clipboard! Send this link to your tablet.";
-        }
-
-        window.addEventListener('DOMContentLoaded', () => {
-            // Priority 1: Check URL hash for new config
-            let saved = parseHashConfig();
-            
-            // Priority 2: Check LocalStorage
-            if (!saved) {
-                const data = storage.get('einkConfig');
-                if (data) saved = JSON.parse(data);
-            }
-
-            if (saved) {
-                config = saved;
-                document.getElementById('owm-key').value = config.owmKey || '';
-                document.getElementById('client-id').value = config.clientId || '';
-                document.getElementById('lat').value = config.lat || '';
-                document.getElementById('lon').value = config.lon || '';
-
-                if (config.owmKey && config.clientId) {
-                    document.getElementById('setup-overlay').classList.add('hidden');
-                    startDashboardIntervals();
-                }
-            }
-
-            const savedFocus = storage.get('dailyFocus');
-            if (savedFocus) {
-                document.getElementById('daily-focus').value = savedFocus;
-            }
-
-            updateClock();
-        });
-
-        function saveFocus() {
-            storage.set('dailyFocus', document.getElementById('daily-focus').value);
-        }
-
-        function clearSavedData() {
-            storage.remove('einkConfig');
-            storage.remove('gToken');
+            localStorage.setItem('einkConfig', JSON.stringify(newConfig));
             location.reload();
         }
 
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            document.getElementById('date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-        }
-
-        function getLucideWeatherIcon(iconCode) {
-            if (!iconCode) return 'cloud';
-            const code = iconCode.substring(0, 2);
-            const isDay = iconCode.endsWith('d');
-            const map = {
-                '01': isDay ? 'sun' : 'moon',
-                '02': isDay ? 'cloud-sun' : 'cloud-moon',
-                '03': 'cloud', '04': 'cloud', '09': 'cloud-drizzle',
-                '10': 'cloud-rain', '11': 'cloud-lightning', '13': 'snowflake', '50': 'haze'
-            };
-            return map[code] || 'cloud';
-        }
-
-        async function fetchWeather() {
-            if (!config.owmKey) return;
-            const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${config.lat}&lon=${config.lon}&appid=${config.owmKey}&units=metric`;
-            try {
-                const curRes = await fetch(currentUrl);
-                if (!curRes.ok) throw new Error(`Weather Error: ${curRes.status}`);
-                const cur = await curRes.json();
-                document.getElementById('temp').textContent = Math.round(cur?.main?.temp) + '°';
-                document.getElementById('condition').textContent = cur?.weather?.[0]?.description || 'Clear';
-                const iconName = getLucideWeatherIcon(cur?.weather?.[0]?.icon);
-                document.getElementById('weather-icon').innerHTML = `<i data-lucide="${iconName}" class="w-24 h-24 stroke-[1.5]"></i>`;
-                lucide.createIcons();
-            } catch (e) { document.getElementById('condition').textContent = "API Error"; }
-        }
+        // --- GOOGLE AUTH ENGINE ---
 
         function gapiLoaded() {
             gapi.load('client', async () => {
@@ -275,161 +147,133 @@
                         "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
                     ],
                 });
-                gapiLoadedFlag = true;
-
-                const savedToken = storage.get('gToken');
-                if (savedToken) {
-                    const tokenObj = JSON.parse(savedToken);
-                    if (Date.now() < tokenObj.expiry) {
-                        gapi.client.setToken(tokenObj);
-                    }
-                }
-
-                if (config.clientId) initTokenClient();
+                gapiInited = true;
+                checkInitStatus();
             });
         }
 
         function gisLoaded() {
-            gisLoadedFlag = true;
-            if (gapiLoadedFlag && config.clientId) initTokenClient();
+            gisInited = true;
+            checkInitStatus();
         }
 
-        function initTokenClient() {
-            if (!gisLoadedFlag || !config.clientId) return;
+        function checkInitStatus() {
+            if (gapiInited && gisInited && config.clientId) {
+                setupTokenClient();
+            }
+        }
 
+        function setupTokenClient() {
             tokenClient = google.accounts.oauth2.initTokenClient({
                 client_id: config.clientId,
                 scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks',
-                callback: async (resp) => {
-                    if (resp.error) return;
-                    resp.expiry = Date.now() + (resp.expires_in * 1000);
-                    storage.set('gToken', JSON.stringify(resp));
-
-                    document.getElementById('auth-btn').classList.add('hidden');
+                callback: (resp) => {
+                    if (resp.error) {
+                        showAuthButton();
+                        return;
+                    }
+                    resp.expires_at = Date.now() + (resp.expires_in * 1000);
+                    localStorage.setItem('gToken', JSON.stringify(resp));
+                    gapi.client.setToken(resp);
+                    hideAuthButton();
                     loadDashboardData();
                 },
             });
-            checkShowAuthButton();
-        }
 
-        function checkShowAuthButton() {
-            if (gapiLoadedFlag && tokenClient) {
-                if (gapi.client.getToken() === null) {
-                    document.getElementById('auth-btn').classList.remove('hidden');
-                } else {
-                    document.getElementById('auth-btn').classList.add('hidden');
-                    loadDashboardData();
-                }
+            const savedToken = JSON.parse(localStorage.getItem('gToken') || 'null');
+            if (savedToken && savedToken.access_token && Date.now() < savedToken.expires_at) {
+                gapi.client.setToken(savedToken);
+                hideAuthButton();
+                loadDashboardData();
+            } else {
+                showAuthButton();
             }
         }
 
-        async function handleAuthClick() {
-            if (!tokenClient) return;
-            tokenClient.requestAccessToken({prompt: gapi.client.getToken() === null ? 'consent' : ''});
+        function showAuthButton() {
+            document.getElementById('auth-btn').classList.remove('hidden');
+            document.getElementById('calendar-list').innerHTML = '<div class="text-xl italic">Google authorization is required to view your agenda.</div>';
+        }
+
+        function hideAuthButton() {
+            document.getElementById('auth-btn').classList.add('hidden');
+        }
+
+        function handleAuthClick() {
+            if (tokenClient) {
+                tokenClient.requestAccessToken({ prompt: 'consent' });
+            }
         }
 
         async function loadDashboardData() {
-            if (!gapi.client.getToken()) {
-                checkShowAuthButton();
-                return;
-            }
+            if (!gapi.client.getToken()) return;
             try {
                 const [cal, task] = await Promise.all([
-                    gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': (new Date()).toISOString(), 'singleEvents': true, 'maxResults': 8, 'orderBy': 'startTime' }),
-                    gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false, 'maxResults': 10 })
+                    gapi.client.calendar.events.list({ 'calendarId': 'primary', 'timeMin': (new Date()).toISOString(), 'singleEvents': true, 'maxResults': 10, 'orderBy': 'startTime' }),
+                    gapi.client.tasks.tasks.list({ 'tasklist': '@default', 'showCompleted': false, 'maxResults': 15 })
                 ]);
                 renderCalendar(cal.result.items);
                 renderTasks(task.result.items);
             } catch (e) {
-                console.error("Data load failed", e);
-                if (e.status === 401) {
-                    storage.remove('gToken');
-                    gapi.client.setToken(null);
-                    checkShowAuthButton();
-                }
-            }
-        }
-
-        async function completeTask(taskId, elementId) {
-            const el = document.getElementById(elementId);
-            el.classList.add('completing');
-
-            try {
-                await gapi.client.tasks.tasks.patch({
-                    tasklist: '@default',
-                    task: taskId,
-                    resource: { status: 'completed' }
-                });
-                setTimeout(loadDashboardData, 600);
-            } catch (e) {
-                console.error("Failed to complete task", e);
-                el.classList.remove('completing');
+                if (e.status === 401) showAuthButton();
             }
         }
 
         function renderCalendar(events) {
             const list = document.getElementById('calendar-list');
-            list.innerHTML = events && events.length ? '' : '<div class="text-xl">No upcoming events.</div>';
+            list.innerHTML = events?.length ? '' : '<div class="text-xl italic">No upcoming events.</div>';
             events?.forEach(e => {
                 const start = new Date(e.start.dateTime || e.start.date);
-                list.innerHTML += `
-                    <div class="flex items-start gap-6 border-l-8 border-black pl-6 py-2">
-                        <div class="font-bold min-w-[100px] text-3xl">${e.start.dateTime ? start.getHours().toString().padStart(2,'0')+':'+start.getMinutes().toString().padStart(2,'0') : 'DAY'}</div>
-                        <div><div class="text-3xl font-semibold">${e.summary}</div></div>
-                    </div>`;
+                const time = e.start.dateTime ? start.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', hour12:false}) : 'ALL DAY';
+                list.innerHTML += `<div class="flex items-start gap-6 border-l-8 border-black pl-6 py-2">
+                    <div class="font-bold min-w-[100px] text-3xl">${time}</div>
+                    <div class="text-3xl font-semibold">${e.summary}</div>
+                </div>`;
             });
         }
 
         function renderTasks(tasks) {
             const list = document.getElementById('tasks-list');
-            list.innerHTML = tasks && tasks.length ? '' : '<div class="text-xl">Clean slate!</div>';
-            tasks?.forEach((t, index) => {
-                const elementId = `task-${index}`;
-                list.innerHTML += `
-                    <div id="${elementId}" class="task-item flex items-center gap-4 py-3 border-b-2 border-gray-200 group">
-                        <button onclick="completeTask('${t.id}', '${elementId}')" class="hover:scale-110 transition-transform flex-shrink-0">
-                            <i data-lucide="square" class="w-8 h-8"></i>
-                        </button>
-                        <div class="text-3xl flex-grow cursor-default">${t.title}</div>
-                    </div>`;
+            list.innerHTML = tasks?.length ? '' : '<div class="text-xl italic">No tasks.</div>';
+            tasks?.forEach((t, i) => {
+                list.innerHTML += `<div id="task-${i}" class="task-item flex items-center gap-4 py-3 border-b-2 border-gray-100">
+                    <button onclick="completeTask('${t.id}', 'task-${i}')"><i data-lucide="square" class="w-8 h-8"></i></button>
+                    <div class="text-3xl flex-grow">${t.title}</div>
+                </div>`;
             });
             lucide.createIcons();
         }
 
-        function saveConfig() {
-            config.owmKey = document.getElementById('owm-key').value;
-            config.clientId = document.getElementById('client-id').value;
-            config.lat = document.getElementById('lat').value;
-            config.lon = document.getElementById('lon').value;
-
-            if (config.owmKey && config.clientId) {
-                storage.set('einkConfig', JSON.stringify(config));
-                document.getElementById('setup-overlay').classList.add('hidden');
-                initTokenClient();
-                startDashboardIntervals();
-            }
+        async function completeTask(id, elId) {
+            document.getElementById(elId).classList.add('completing');
+            await gapi.client.tasks.tasks.patch({ tasklist: '@default', task: id, resource: { status: 'completed' } });
+            setTimeout(loadDashboardData, 500);
         }
 
-        function startDashboardIntervals() {
-            updateClock();
-            fetchWeather();
-            if (gapiLoadedFlag) loadDashboardData();
-
-            setInterval(updateClock, 60000);
-            setInterval(fetchWeather, 43200000);
-            setInterval(loadDashboardData, 300000);
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+            document.getElementById('date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
         }
 
-        function refreshAll() {
-            updateClock();
-            fetchWeather();
-            if (gapiLoadedFlag) {
-                loadDashboardData();
-            }
-            const btn = document.querySelector('button[title="Refresh Dashboard"] i');
-            btn.classList.add('animate-spin');
-            setTimeout(() => btn.classList.remove('animate-spin'), 500);
+        async function fetchWeather() {
+            if (!config.owmKey) return;
+            try {
+                const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${config.lat}&lon=${config.lon}&appid=${config.owmKey}&units=metric`);
+                const cur = await res.json();
+                document.getElementById('temp').textContent = Math.round(cur.main.temp) + '°';
+                document.getElementById('condition').textContent = cur.weather[0].description;
+                document.getElementById('weather-icon').innerHTML = `<i data-lucide="${getLucideWeatherIcon(cur.weather[0].icon)}" class="w-24 h-24"></i>`;
+                lucide.createIcons();
+            } catch (e) {}
         }
+
+        function getLucideWeatherIcon(code) {
+            const map = { '01':'sun', '02':'cloud-sun', '03':'cloud', '04':'cloud', '09':'cloud-drizzle', '10':'cloud-rain', '11':'cloud-lightning', '13':'snowflake', '50':'haze' };
+            return map[code.substring(0,2)] || 'cloud';
+        }
+
+        function refreshAll() { loadDashboardData(); fetchWeather(); }
     </script>
     <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
     <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
