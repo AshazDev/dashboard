@@ -49,7 +49,7 @@
     <!-- Config Overlay -->
     <div id="setup-overlay" class="fixed inset-0 bg-white z-50 p-8 flex flex-col items-center justify-center border-4 border-black">
         <h1 class="text-4xl font-bold mb-8 text-center">Dashboard Sign in</h1>
-        <div class="space-y-4 w-full max-md">
+        <div class="space-y-4 w-full max-w-md">
             <input type="text" id="owm-key" placeholder="OpenWeather API Key" class="w-full p-4 border-2 border-black text-xl">
             <input type="text" id="client-id" placeholder="Google OAuth Client ID" class="w-full p-4 border-2 border-black text-xl">
             <div class="flex gap-2">
@@ -57,7 +57,13 @@
                 <input type="text" id="lon" placeholder="Lon (e.g. -0.12)" class="w-1/2 p-4 border-2 border-black text-xl">
             </div>
             <button onclick="saveConfig()" class="w-full bg-black text-white p-4 text-xl font-bold uppercase tracking-widest">Start Dashboard</button>
-            <button onclick="clearSavedData()" class="w-full bg-white text-black border-2 border-black p-4 text-sm font-bold uppercase tracking-widest mt-2">Clear Saved Keys</button>
+            
+            <div class="pt-4 border-t-2 border-black flex flex-col gap-2">
+                <button onclick="generateConfigURL()" class="w-full bg-white text-black border-2 border-black p-4 text-sm font-bold uppercase tracking-widest">Generate Setup URL</button>
+                <div id="url-feedback" class="text-xs break-all text-center text-gray-500 font-mono">For easy entry on E-Ink devices</div>
+            </div>
+
+            <button onclick="clearSavedData()" class="w-full text-red-600 p-2 text-xs font-bold uppercase mt-8 opacity-50">Clear Saved Keys</button>
         </div>
     </div>
 
@@ -114,7 +120,6 @@
         let gapiLoadedFlag = false;
         let gisLoadedFlag = false;
 
-        // Storage Helper to handle sandboxed environments
         const storage = {
             set: (key, value) => {
                 try {
@@ -141,21 +146,73 @@
 
         lucide.createIcons();
 
-        window.addEventListener('DOMContentLoaded', () => {
-            const saved = storage.get('einkConfig');
-            if (saved) {
+        // New Helper to parse config from URL hash
+        function parseHashConfig() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#config=')) {
                 try {
-                    config = JSON.parse(saved);
-                    document.getElementById('owm-key').value = config.owmKey || '';
-                    document.getElementById('client-id').value = config.clientId || '';
-                    document.getElementById('lat').value = config.lat || '';
-                    document.getElementById('lon').value = config.lon || '';
+                    const base64 = hash.split('#config=')[1];
+                    const decoded = JSON.parse(atob(base64));
+                    // Update storage and local config
+                    storage.set('einkConfig', JSON.stringify(decoded));
+                    // Clear hash to prevent infinite loops/messy URLs
+                    window.history.replaceState(null, null, window.location.pathname);
+                    return decoded;
+                } catch (e) {
+                    console.error("Failed to parse URL config", e);
+                }
+            }
+            return null;
+        }
 
-                    if (config.owmKey && config.clientId) {
-                        document.getElementById('setup-overlay').classList.add('hidden');
-                        startDashboardIntervals();
-                    }
-                } catch(e) { console.error("Config parse failed"); }
+        function generateConfigURL() {
+            const curConfig = {
+                owmKey: document.getElementById('owm-key').value,
+                clientId: document.getElementById('client-id').value,
+                lat: document.getElementById('lat').value,
+                lon: document.getElementById('lon').value
+            };
+            
+            if (!curConfig.owmKey || !curConfig.clientId) {
+                document.getElementById('url-feedback').innerText = "Enter Keys First!";
+                return;
+            }
+
+            const base64 = btoa(JSON.stringify(curConfig));
+            const url = `${window.location.origin}${window.location.pathname}#config=${base64}`;
+            
+            // Attempt to copy to clipboard
+            const el = document.createElement('textarea');
+            el.value = url;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+
+            document.getElementById('url-feedback').innerText = "URL Copied to clipboard! Send this link to your tablet.";
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Priority 1: Check URL hash for new config
+            let saved = parseHashConfig();
+            
+            // Priority 2: Check LocalStorage
+            if (!saved) {
+                const data = storage.get('einkConfig');
+                if (data) saved = JSON.parse(data);
+            }
+
+            if (saved) {
+                config = saved;
+                document.getElementById('owm-key').value = config.owmKey || '';
+                document.getElementById('client-id').value = config.clientId || '';
+                document.getElementById('lat').value = config.lat || '';
+                document.getElementById('lon').value = config.lon || '';
+
+                if (config.owmKey && config.clientId) {
+                    document.getElementById('setup-overlay').classList.add('hidden');
+                    startDashboardIntervals();
+                }
             }
 
             const savedFocus = storage.get('dailyFocus');
@@ -220,11 +277,9 @@
                 });
                 gapiLoadedFlag = true;
 
-                // If we have a saved token, try to use it
                 const savedToken = storage.get('gToken');
                 if (savedToken) {
                     const tokenObj = JSON.parse(savedToken);
-                    // Check if token might be expired (tokens usually last 1 hour)
                     if (Date.now() < tokenObj.expiry) {
                         gapi.client.setToken(tokenObj);
                     }
@@ -247,7 +302,6 @@
                 scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks',
                 callback: async (resp) => {
                     if (resp.error) return;
-                    // Persist token with an expiry (1 hour from now)
                     resp.expiry = Date.now() + (resp.expires_in * 1000);
                     storage.set('gToken', JSON.stringify(resp));
 
@@ -271,7 +325,6 @@
 
         async function handleAuthClick() {
             if (!tokenClient) return;
-            // Always request if no token, otherwise only if expired
             tokenClient.requestAccessToken({prompt: gapi.client.getToken() === null ? 'consent' : ''});
         }
 
@@ -352,8 +405,6 @@
             if (config.owmKey && config.clientId) {
                 storage.set('einkConfig', JSON.stringify(config));
                 document.getElementById('setup-overlay').classList.add('hidden');
-
-                // Trigger GIS init with new key
                 initTokenClient();
                 startDashboardIntervals();
             }
@@ -366,7 +417,7 @@
 
             setInterval(updateClock, 60000);
             setInterval(fetchWeather, 43200000);
-            setInterval(loadDashboardData, 300000); // Check for new data every 5 mins
+            setInterval(loadDashboardData, 300000);
         }
 
         function refreshAll() {
