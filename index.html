@@ -4,324 +4,537 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>E-Ink Dashboard</title>
+
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://accounts.google.com/gsi/client"></script>
-    <script src="https://apis.google.com/js/api.js"></script>
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script async defer src="https://accounts.google.com/gsi/client"></script>
+    <script async defer src="https://apis.google.com/js/api.js"></script>
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        :root { --bg-color: #ffffff; --text-color: #000000; }
+
         body {
-            background-color: #fff;
-            color: #000;
             font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
             overflow: hidden;
-            width: 100vw;
-            height: 100vh;
+            -webkit-font-smoothing: none;
+            text-rendering: optimizeLegibility;
+            image-rendering: pixelated;
         }
-        ::-webkit-scrollbar { width: 0px; }
+
+        .eink-border { border: 4px solid var(--text-color); }
+        .eink-border-b { border-bottom: 4px solid var(--text-color); }
+        .eink-border-r { border-right: 4px solid var(--text-color); }
+        .eink-shadow { box-shadow: 6px 6px 0px var(--text-color); }
+
+        .eink-btn {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            border: 4px solid var(--text-color);
+            font-weight: 800;
+            text-transform: uppercase;
+            padding: 1rem 2rem;
+            cursor: pointer;
+            box-shadow: 6px 6px 0px var(--text-color);
+        }
+
+        .eink-btn:active {
+            box-shadow: 2px 2px 0px var(--text-color);
+            transform: translate(4px, 4px);
+        }
+
+        .eink-input {
+            width: 100%; border: 4px solid var(--text-color);
+            padding: 1rem; font-size: 1.25rem; font-weight: 600;
+            outline: none; background: white; color: black;
+        }
+
         .hidden { display: none !important; }
-        .eink-btn { border: 2px solid #000; padding: 10px 20px; font-weight: bold; text-transform: uppercase; }
-        .border-eink { border-bottom: 4px solid #000; }
-        /* High contrast focus states for e-ink */
-        input:focus { outline: 3px solid #000; outline-offset: 2px; }
+
+        #dashboard-view {
+            display: grid;
+            grid-template-columns: 350px 1fr 1fr;
+            grid-template-rows: 1fr 100px;
+            height: 100vh; width: 100vw;
+        }
+
+        .sidebar { grid-column: 1; grid-row: 1 / span 2; }
+        .calendar-section { grid-column: 2; grid-row: 1; }
+        .tasks-section { grid-column: 3; grid-row: 1; }
+
+        * { transition: none !important; animation: none !important; }
     </style>
 </head>
-<body class="p-8 md:p-12 flex flex-col relative">
+<body>
 
-    <!-- Config Overlay -->
-    <div id="setup-overlay" class="fixed inset-0 bg-white z-50 p-8 flex flex-col items-center justify-center border-4 border-black overflow-y-auto">
-        <h1 class="text-4xl font-bold mb-8 uppercase tracking-tighter">Dashboard Setup</h1>
-        <div class="space-y-4 w-full max-w-md">
-            <input type="text" id="owm-key" placeholder="Weather API Key" class="w-full p-4 border-2 border-black text-xl">
-            <input type="text" id="client-id" placeholder="Google Client ID" class="w-full p-4 border-2 border-black text-xl">
-            <input type="text" id="user-email" placeholder="Google Email (for auto-login hint)" class="w-full p-4 border-2 border-black text-xl">
-            <div class="flex gap-2">
-                <input type="text" id="lat" placeholder="Lat" class="w-1/2 p-4 border-2 border-black">
-                <input type="text" id="lon" placeholder="Lon" class="w-1/2 p-4 border-2 border-black">
-            </div>
-            <div class="grid grid-cols-2 gap-4 pt-4">
-                <button onclick="saveConfig()" class="bg-black text-white p-4 font-bold uppercase hover:bg-gray-800 transition-colors">Save Local</button>
-                <button onclick="generateSetupUrl()" class="border-2 border-black p-4 font-bold uppercase text-sm hover:bg-gray-100 transition-colors">Generate Link</button>
-            </div>
-            <div id="url-container" class="hidden mt-4 p-4 border-2 border-dashed border-black bg-gray-50">
-                <p class="text-xs mb-2 font-bold uppercase">Paste this into Fully Kiosk:</p>
-                <textarea id="setup-url-output" readonly class="w-full text-[10px] p-2 border border-gray-300 h-20 bg-white"></textarea>
-                <button onclick="copySetupUrl()" class="mt-2 text-xs font-bold underline uppercase">Copy Link</button>
+    <!-- INITIAL CHOICE -->
+    <div id="init-view" class="w-full h-full flex flex-col items-center justify-center space-y-8">
+        <h1 class="text-6xl font-black mb-8 uppercase tracking-tighter text-center">E-Ink Dashboard</h1>
+        <div class="flex flex-col md:flex-row gap-8">
+            <button onclick="showView('setup-view')" class="eink-btn text-2xl flex flex-col items-center p-8 gap-4">
+                <i class="ph ph-gear text-6xl"></i>
+                Manual Setup
+            </button>
+            <button onclick="showView('pair-input-view')" class="eink-btn text-2xl flex flex-col items-center p-8 gap-4">
+                <i class="ph ph-broadcast text-6xl"></i>
+                Enter Sync Code
+            </button>
+        </div>
+    </div>
+
+    <!-- MANUAL SETUP -->
+    <div id="setup-view" class="w-full h-full flex flex-col items-center justify-center hidden p-8 overflow-y-auto">
+        <div class="max-w-3xl w-full eink-border p-8 eink-shadow bg-white">
+            <h2 class="text-4xl font-black mb-6 uppercase">Settings</h2>
+            <div class="space-y-4">
+                <input type="text" id="config-owm-key" class="eink-input" placeholder="OpenWeather API Key">
+                <div class="grid grid-cols-2 gap-4">
+                    <input type="text" id="config-lat" class="eink-input" placeholder="Latitude (e.g. 26.2)">
+                    <input type="text" id="config-lon" class="eink-input" placeholder="Longitude (e.g. 50.5)">
+                </div>
+                <input type="text" id="config-google-id" class="eink-input" placeholder="Google Client ID">
+                <input type="email" id="config-email" class="eink-input" placeholder="Your Google Email (for sign-in hint)">
+
+                <div class="pt-4 flex justify-between">
+                    <button onclick="showView('init-view')" class="eink-btn">Back</button>
+                    <button onclick="saveManualConfig()" class="eink-btn bg-black text-white">Generate Code & Save</button>
+                </div>
             </div>
         </div>
     </div>
 
-    <!-- Main Dashboard UI -->
-    <header class="flex justify-between items-start mb-10">
-        <div>
-            <div id="clock" class="text-9xl font-light tracking-tighter leading-none">00:00</div>
-            <div id="date" class="text-4xl text-gray-700 mt-4 uppercase tracking-[0.2em] font-medium">--</div>
+    <!-- PAIR DISPLAY VIEW (After manual setup) -->
+    <div id="pair-display-view" class="w-full h-full flex flex-col items-center justify-center hidden">
+        <h2 class="text-4xl font-black mb-4 uppercase text-center">Your Sync Code</h2>
+        <div id="generated-pairing-code" class="text-9xl font-black tracking-widest eink-border p-12 eink-shadow mb-8 bg-white">
+            ------
         </div>
-        <div id="weather-container" class="text-right flex items-center gap-6">
-            <div class="flex flex-col items-end">
-                <span id="temp" class="text-8xl font-normal leading-none">--°</span>
-                <span id="condition" class="text-2xl uppercase font-semibold text-gray-600 mt-2">Syncing...</span>
+        <p class="text-xl font-bold mb-8 max-w-md text-center">Use this code on other devices to sync this configuration.</p>
+        <button onclick="location.reload()" class="eink-btn text-2xl bg-black text-white">Open Dashboard</button>
+    </div>
+
+    <!-- PAIR INPUT VIEW (For syncing a new device) -->
+    <div id="pair-input-view" class="w-full h-full flex flex-col items-center justify-center hidden">
+        <h2 class="text-4xl font-black mb-4 uppercase">Enter Sync Code</h2>
+        <input type="text" id="pair-code-input" maxlength="6" class="eink-input text-center text-7xl font-black tracking-widest uppercase mb-8 w-96 h-32" placeholder="------">
+        <div class="flex gap-4">
+            <button onclick="showView('init-view')" class="eink-btn text-2xl">Back</button>
+            <button onclick="syncFromCode()" class="eink-btn text-2xl bg-black text-white">Sync</button>
+        </div>
+    </div>
+
+    <!-- DASHBOARD -->
+    <div id="dashboard-view" class="hidden">
+        <div class="sidebar eink-border-r flex flex-col p-8 justify-between bg-white">
+            <div>
+                <div id="dash-time" class="text-8xl font-black tracking-tighter leading-none mb-2">12:00</div>
+                <div id="dash-ampm" class="text-4xl font-bold mb-2">PM</div>
+                <div id="dash-date" class="text-2xl font-semibold border-b-4 border-black pb-6 mb-6">Monday, Jan 1</div>
+
+                <!-- Weather -->
+                <div class="flex flex-col gap-4 mb-8">
+                    <div class="flex items-center gap-4">
+                        <i id="weather-icon" class="ph ph-cloud-sun text-7xl"></i>
+                        <span id="weather-temp" class="text-6xl font-black">--°</span>
+                    </div>
+                    <div id="weather-desc" class="text-2xl font-bold uppercase">Loading...</div>
+                </div>
+
+                <!-- Prayer -->
+                <div class="border-t-4 border-black pt-6">
+                    <div class="text-lg font-black uppercase tracking-widest opacity-60">Next Prayer</div>
+                    <div id="prayer-display" class="text-4xl font-black mt-2">--:--</div>
+                    <div id="prayer-name" class="text-xl font-bold uppercase">...</div>
+                </div>
             </div>
-            <div id="weather-icon" class="flex items-center justify-center">
-                <i data-lucide="cloud" class="w-24 h-24 stroke-[1.5]"></i>
+
+            <!-- Bottom Sidebar Actions -->
+            <div class="border-t-4 border-black pt-6 space-y-4">
+                <button id="btn-auth-google" onclick="authenticateGoogle()" class="eink-btn w-full py-3 bg-white flex items-center justify-center gap-2">
+                    <i class="ph ph-google-logo text-2xl"></i> Authorize Google
+                </button>
+
+                <div class="flex gap-2">
+                    <button onclick="refreshDashboard()" class="eink-btn flex-1 py-2 text-sm">Refresh</button>
+                    <button onclick="clearSettings()" class="eink-btn py-2 text-sm"><i class="ph ph-trash"></i></button>
+                </div>
+
+                <div class="text-[10px] font-bold opacity-30 text-center uppercase tracking-tighter">
+                    Last Sync: <span id="sync-time">Never</span>
+                </div>
             </div>
         </div>
-    </header>
 
-    <main class="grid grid-cols-12 gap-12 flex-grow overflow-hidden">
-        <!-- Agenda -->
-        <section class="col-span-7 flex flex-col h-full overflow-hidden">
-            <h2 class="text-3xl font-bold uppercase border-eink pb-2 mb-6 tracking-wider">Agenda</h2>
-            <div id="calendar-list" class="flex-grow overflow-y-auto space-y-6 text-2xl">
-                <div id="auth-status" class="italic text-gray-400">Initializing Google Services...</div>
-            </div>
-            <div id="g_id_signin_container" class="mt-4"></div>
-        </section>
-
-        <!-- Tasks -->
-        <section class="col-span-5 flex flex-col h-full overflow-hidden">
-            <h2 class="text-3xl font-bold uppercase border-eink pb-2 mb-6 tracking-wider">Tasks</h2>
-            <div id="tasks-list" class="flex-grow overflow-y-auto space-y-4">
-                <div class="italic text-gray-400">Waiting for sync...</div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Footer Controls -->
-    <footer class="flex justify-between items-center mt-6 pt-4 border-t-2 border-gray-100">
-        <div class="flex items-center gap-4">
-            <button onclick="refreshAll()" class="w-16 h-16 border-2 border-black flex items-center justify-center rounded-full hover:bg-black hover:text-white transition-all shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:shadow-none active:translate-x-1 active:translate-y-1">
-                <i data-lucide="refresh-cw" class="w-7 h-7"></i>
-            </button>
-            <span class="text-sm font-bold uppercase tracking-widest text-gray-400">Last updated: <span id="last-update">--:--</span></span>
-        </div>
-
-        <div id="battery-status" class="flex items-center gap-2 text-2xl font-bold uppercase tracking-tighter">
-            <span id="battery-percent">--%</span>
-            <div id="battery-icon-container" class="flex items-center">
-                <i data-lucide="battery" class="w-10 h-10"></i>
+        <!-- Agenda Column -->
+        <div class="calendar-section p-8 eink-border-r overflow-hidden bg-white">
+            <h2 class="text-4xl font-black mb-6 border-b-4 border-black pb-4 flex items-center gap-3">
+                <i class="ph ph-calendar"></i> Agenda
+            </h2>
+            <div id="calendar-list" class="space-y-6">
+                <p class="text-gray-400 font-bold uppercase">Authorize Google to see events</p>
             </div>
         </div>
-    </footer>
 
-    <script>
-        let config = JSON.parse(localStorage.getItem('einkConfig') || 'null');
-        let gapiInited = false;
-        let gisInited = false;
-        let tokenClient;
+        <!-- Tasks Column -->
+        <div class="tasks-section p-8 overflow-hidden bg-white">
+            <h2 class="text-4xl font-black mb-6 border-b-4 border-black pb-4 flex items-center gap-3">
+                <i class="ph ph-check-square"></i> Tasks
+            </h2>
+            <div id="tasks-list" class="space-y-4">
+                <p class="text-gray-400 font-bold uppercase">Authorize Google to see tasks</p>
+            </div>
+        </div>
+    </div>
 
-        // Auto-load config from URL hash
-        const hash = window.location.hash;
-        if (hash.startsWith('#config=')) {
-            try {
-                config = JSON.parse(atob(hash.split('#config=')[1]));
-                localStorage.setItem('einkConfig', JSON.stringify(config));
-                window.history.replaceState(null, null, window.location.pathname);
-            } catch(e) { console.error("Config load failed", e); }
+    <!-- Firebase SDKs -->
+    <script type="importmap">
+        {
+          "imports": {
+            "firebase/app": "https://www.gstatic.com/firebasejs/11.0.1/firebase-app.js",
+            "firebase/auth": "https://www.gstatic.com/firebasejs/11.0.1/firebase-auth.js",
+            "firebase/firestore": "https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore.js",
+            "firebase/analytics": "https://www.gstatic.com/firebasejs/11.0.1/firebase-analytics.js"
+          }
         }
+    </script>
 
-        window.onload = () => {
-            if (!config || !config.clientId) {
-                document.getElementById('setup-overlay').classList.remove('hidden');
-                if (config) {
-                    document.getElementById('owm-key').value = config.owmKey || '';
-                    document.getElementById('client-id').value = config.clientId || '';
-                    document.getElementById('user-email').value = config.email || '';
-                    document.getElementById('lat').value = config.lat || '';
-                    document.getElementById('lon').value = config.lon || '';
-                }
-                return;
-            }
-            document.getElementById('setup-overlay').classList.add('hidden');
-            lucide.createIcons();
-            updateClock();
-            setInterval(updateClock, 30000);
-            fetchWeather();
-            setInterval(fetchWeather, 1800000);
-            updateBattery();
+    <!-- Define global functions early -->
+    <script>
+        window.showView = (id) => {
+            document.querySelectorAll('body > div').forEach(d => d.classList.add('hidden'));
+            const target = document.getElementById(id);
+            if (target) target.classList.remove('hidden');
+        };
+    </script>
+
+    <script type="module">
+        import { initializeApp } from "firebase/app";
+        import { getAnalytics } from "firebase/analytics";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+        import { getFirestore, doc, setDoc, getDoc, collection } from 'firebase/firestore';
+
+        // Your web app's Firebase configuration
+        // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+        const firebaseConfig = {
+          apiKey: "AIzaSyDaTQo3v3bBGtS1wWXIRjYlMFJ--F0P38c",
+          authDomain: "food-f62d7.firebaseapp.com",
+          databaseURL: "https://food-f62d7-default-rtdb.firebaseio.com",
+          projectId: "food-f62d7",
+          storageBucket: "food-f62d7.appspot.com",
+          messagingSenderId: "1030517927354",
+          appId: "1:1030517927354:web:7869133c666968a3ff0183",
+          measurementId: "G-JWXT2FPZB1"
         };
 
-        function updateClock() {
-            const now = new Date();
-            document.getElementById('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-            document.getElementById('date').textContent = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
-            document.getElementById('last-update').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'eink-dash';
+
+        let einkConfig = JSON.parse(localStorage.getItem('eink_config'));
+        let tokenClient, googleAccessToken;
+        let user = null;
+        let currentTaskListId = null;
+
+        // Load saved Google token
+        const savedGoogleToken = localStorage.getItem('google_access_token');
+        if (savedGoogleToken) {
+            googleAccessToken = savedGoogleToken;
+        }
+
+        // Ensure Auth is ready - handle errors gracefully
+        signInAnonymously(auth).catch(err => {
+            console.warn("Anonymous auth not available:", err.code);
+            // Continue anyway - allow local-only usage
+        });
+        onAuthStateChanged(auth, (u) => { user = u; });
+
+        // Global helper functions
+        window.saveManualConfig = async () => {
+            const config = {
+                owmKey: document.getElementById('config-owm-key').value.trim(),
+                lat: document.getElementById('config-lat').value.trim(),
+                lon: document.getElementById('config-lon').value.trim(),
+                googleId: document.getElementById('config-google-id').value.trim(),
+                email: document.getElementById('config-email').value.trim()
+            };
+
+            if(!config.owmKey || !config.lat || !config.lon) {
+                alert("Please fill in Weather Key and Location.");
+                return;
+            }
+
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+
+            try {
+                if (user) {
+                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'pairings', code), {
+                        config: config,
+                        createdAt: Date.now()
+                    });
+                }
+                localStorage.setItem('eink_config', JSON.stringify(config));
+                document.getElementById('generated-pairing-code').innerText = code;
+                showView('pair-display-view');
+            } catch (err) {
+                console.error(err);
+                alert("Could not save to cloud. Storing locally only.");
+                localStorage.setItem('eink_config', JSON.stringify(config));
+                location.reload();
+            }
+        };
+
+        window.syncFromCode = async () => {
+            const code = document.getElementById('pair-code-input').value.trim().toUpperCase();
+            if (!code || !user) return;
+
+            try {
+                const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'pairings', code);
+                const docSnap = await getDoc(docRef);
+                if (docSnap.exists()) {
+                    localStorage.setItem('eink_config', JSON.stringify(docSnap.data().config));
+                    location.reload();
+                } else {
+                    alert("Invalid or expired code.");
+                }
+            } catch (err) {
+                console.error(err);
+                alert("Sync failed. Check connection.");
+            }
+        };
+
+        window.clearSettings = () => {
+            if(confirm("Clear all settings and reset?")) {
+                localStorage.removeItem('eink_config');
+                localStorage.removeItem('google_access_token');
+                googleAccessToken = null;
+                location.reload();
+            }
+        };
+
+        window.onload = () => {
+            if (einkConfig && einkConfig.owmKey) {
+                showView('dashboard-view');
+                startDashboard();
+            } else {
+                showView('init-view');
+            }
+        };
+
+        function startDashboard() {
+            updateClock();
+            setInterval(updateClock, 60000);
+            fetchWeather();
+            fetchPrayers();
+            initGoogleAPI();
+            setInterval(() => { fetchWeather(); fetchPrayers(); }, 1800000);
         }
 
         async function fetchWeather() {
-            if (!config?.owmKey) return;
             try {
-                const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${config.lat}&lon=${config.lon}&appid=${config.owmKey}&units=metric`);
+                const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${einkConfig.lat}&lon=${einkConfig.lon}&appid=${einkConfig.owmKey}&units=metric`);
                 const data = await res.json();
-                document.getElementById('temp').textContent = Math.round(data.main.temp) + '°';
-                document.getElementById('condition').textContent = data.weather[0].main;
-
-                const iconCode = data.weather[0].icon;
-                const iconMap = { '01':'sun', '02':'cloud-sun', '03':'cloud', '04':'cloud', '09':'cloud-drizzle', '10':'cloud-rain', '11':'cloud-lightning', '13':'snowflake', '50':'wind' };
-                const lucideName = iconMap[iconCode.substring(0,2)] || 'cloud';
-                document.getElementById('weather-icon').innerHTML = `<i data-lucide="${lucideName}" class="w-24 h-24"></i>`;
-                lucide.createIcons();
-            } catch (e) {}
-        }
-
-        // GOOGLE INTEGRATION
-        function gapiLoaded() {
-            gapi.load('client', async () => {
-                await gapi.client.init({
-                    discoveryDocs: ["https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest", "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"],
-                });
-                gapiInited = true;
-                initIdentityServices();
-            });
-        }
-
-        function gisLoaded() {
-            gisInited = true;
-            initIdentityServices();
-        }
-
-        function initIdentityServices() {
-            if (!gapiInited || !gisInited || !config?.clientId) return;
-
-            tokenClient = google.accounts.oauth2.initTokenClient({
-                client_id: config.clientId,
-                scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly',
-                callback: (tokenResponse) => {
-                    if (tokenResponse.error !== undefined) throw (tokenResponse);
-                    localStorage.setItem('gToken', JSON.stringify({
-                        ...tokenResponse,
-                        expires_at: Date.now() + (tokenResponse.expires_in * 1000)
-                    }));
-                    loadData();
-                },
-            });
-
-            const savedToken = JSON.parse(localStorage.getItem('gToken') || 'null');
-            if (savedToken && Date.now() < savedToken.expires_at) {
-                gapi.client.setToken(savedToken);
-                loadData();
-            } else {
-                document.getElementById('auth-status').innerHTML = `
-                    <button onclick="requestToken()" class="eink-btn bg-black text-white hover:bg-gray-800">
-                        Connect Google Account
-                    </button>
-                `;
-                if (config.email) setTimeout(requestToken, 2000);
-            }
-        }
-
-        function requestToken() {
-            tokenClient.requestAccessToken({ prompt: config.email ? '' : 'consent', login_hint: config.email || '' });
-        }
-
-        async function loadData() {
-            document.getElementById('auth-status').classList.add('hidden');
-            try {
-                const [cal, task] = await Promise.all([
-                    gapi.client.calendar.events.list({ calendarId: 'primary', timeMin: new Date().toISOString(), maxResults: 5, singleEvents: true, orderBy: 'startTime' }),
-                    gapi.client.tasks.tasks.list({ tasklist: '@default', maxResults: 10 })
-                ]);
-                renderCalendar(cal.result.items);
-                renderTasks(task.result.items);
-            } catch(e) {
-                if (e.status === 401) {
-                    localStorage.removeItem('gToken');
-                    location.reload();
+                if(data.main) {
+                    document.getElementById('weather-temp').innerText = `${Math.round(data.main.temp)}°`;
+                    document.getElementById('weather-desc').innerText = data.weather[0].description;
                 }
+            } catch (e) { console.error("Weather error", e); }
+        }
+
+        async function fetchPrayers() {
+            try {
+                const res = await fetch(`https://api.aladhan.com/v1/timingsByAddress?address=${einkConfig.lat},${einkConfig.lon}`);
+                const data = await res.json();
+                const timings = data.data.timings;
+
+                const now = new Date();
+                const currentTime = now.getHours() * 60 + now.getMinutes();
+
+                const prayerOrder = ['Fajr', 'Dhuhr', 'Asr', 'Maghrib', 'Isha'];
+                let nextPrayer = prayerOrder[0];
+                let nextTimeStr = timings[nextPrayer];
+
+                for (let p of prayerOrder) {
+                    const [h, m] = timings[p].split(':').map(Number);
+                    if ((h * 60 + m) > currentTime) {
+                        nextPrayer = p;
+                        nextTimeStr = timings[p];
+                        break;
+                    }
+                }
+
+                document.getElementById('prayer-name').innerText = nextPrayer;
+                document.getElementById('prayer-display').innerText = nextTimeStr;
+            } catch (e) { console.error("Prayer error", e); }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            const h = now.getHours();
+            document.getElementById('dash-time').innerText = (h % 12 || 12) + ":" + String(now.getMinutes()).padStart(2, '0');
+            document.getElementById('dash-ampm').innerText = h >= 12 ? 'PM' : 'AM';
+            document.getElementById('dash-date').innerText = now.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+        }
+
+        function initGoogleAPI() {
+            if (!einkConfig.googleId) return;
+
+            const check = setInterval(() => {
+                if (window.google && window.gapi) {
+                    clearInterval(check);
+
+                    // Initialize GAPI client first
+                    gapi.load('client', async () => {
+                        try {
+                            await gapi.client.init({
+                                discoveryDocs: [
+                                    "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+                                    "https://www.googleapis.com/discovery/v1/apis/tasks/v1/rest"
+                                ]
+                            });
+
+                            // Then initialize GIS token client
+                            tokenClient = google.accounts.oauth2.initTokenClient({
+                                client_id: einkConfig.googleId,
+                                scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/tasks.readonly',
+                                hint: einkConfig.email || '',
+                                callback: async (resp) => {
+                                    if (resp.access_token) {
+                                        googleAccessToken = resp.access_token;
+                                        localStorage.setItem('google_access_token', googleAccessToken);
+                                        gapi.client.setToken({ access_token: googleAccessToken });
+                                        document.getElementById('btn-auth-google').classList.add('hidden');
+                                        fetchGoogleData();
+                                    }
+                                }
+                            });
+
+                            // If we have a saved token, try to use it with silent prompt
+                            if (googleAccessToken) {
+                                try {
+                                    gapi.client.setToken({ access_token: googleAccessToken });
+                                    // Try to fetch data to validate token
+                                    await fetchGoogleData();
+                                    document.getElementById('btn-auth-google').classList.add('hidden');
+                                } catch (err) {
+                                    console.log('Saved token invalid or expired, requesting new token');
+                                    localStorage.removeItem('google_access_token');
+                                    googleAccessToken = null;
+                                    document.getElementById('btn-auth-google').classList.remove('hidden');
+                                    // Attempt silent sign in
+                                    if (tokenClient) {
+                                        tokenClient.requestAccessToken({ prompt: '' });
+                                    }
+                                }
+                            } else {
+                                document.getElementById('btn-auth-google').classList.remove('hidden');
+                            }
+                        } catch (err) {
+                            console.error("GAPI Init Error:", err);
+                        }
+                    });
+                }
+            }, 500);
+        }
+
+        window.authenticateGoogle = () => {
+            if (!tokenClient) {
+                initGoogleAPI();
+                setTimeout(() => {
+                    if (!tokenClient) {
+                        alert("Google library is taking longer than expected. Check your Client ID.");
+                    } else {
+                        tokenClient.requestAccessToken({ prompt: 'consent' });
+                    }
+                }, 1500);
+                return;
             }
+            tokenClient.requestAccessToken({ prompt: 'consent' });
+        };
+
+        async function fetchGoogleData() {
+            document.getElementById('sync-time').innerText = new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+            fetchCalendar();
+            fetchTasks();
         }
 
-        function renderCalendar(items) {
-            const list = document.getElementById('calendar-list');
-            list.innerHTML = items?.length ? '' : '<div class="italic text-gray-400">No upcoming events</div>';
-            items?.forEach(item => {
-                const start = new Date(item.start.dateTime || item.start.date);
-                const timeStr = item.start.dateTime ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }) : 'ALL DAY';
-                list.innerHTML += `<div class="border-l-4 border-black pl-6 py-1">
-                    <div class="font-bold text-lg text-gray-400 uppercase tracking-widest leading-none mb-1">${timeStr}</div>
-                    <div class="text-3xl font-semibold leading-tight">${item.summary}</div>
-                </div>`;
-            });
+        async function fetchCalendar() {
+            try {
+                const res = await gapi.client.calendar.events.list({
+                    'calendarId': 'primary', 'timeMin': (new Date()).toISOString(),
+                    'showDeleted': false, 'singleEvents': true, 'maxResults': 8, 'orderBy': 'startTime'
+                });
+                const events = res.result.items || [];
+                const list = document.getElementById('calendar-list');
+                list.innerHTML = events.map(e => {
+                    const start = e.start.dateTime || e.start.date;
+                    const time = e.start.dateTime ? new Date(start).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : "All Day";
+                    return `<div class="border-b-2 border-black pb-2"><div class="text-xl font-black">${e.summary}</div><div class="text-lg font-bold opacity-60">${time}</div></div>`;
+                }).join('') || "No upcoming events";
+            } catch (e) { console.error(e); }
         }
 
-        function renderTasks(items) {
-            const list = document.getElementById('tasks-list');
-            list.innerHTML = items?.length ? '' : '<div class="italic text-gray-400">No active tasks</div>';
-            items?.forEach(item => {
-                list.innerHTML += `<div class="text-2xl py-3 border-b-2 border-gray-100 flex items-center gap-3">
-                    <span class="text-black font-bold">○</span>
-                    <span class="truncate">${item.title}</span>
-                </div>`;
-            });
+        async function fetchTasks() {
+            try {
+                const lists = await gapi.client.tasks.tasklists.list({ maxResults: 1 });
+                if (lists.result.items && lists.result.items.length > 0) {
+                    currentTaskListId = lists.result.items[0].id;
+                    const tasks = await gapi.client.tasks.tasks.list({ 'tasklist': currentTaskListId, 'showCompleted': false });
+                    const list = document.getElementById('tasks-list');
+                    list.innerHTML = (tasks.result.items || []).map(t => {
+                        let dueText = '';
+                        if (t.due) {
+                            const dueDate = new Date(t.due);
+                            dueText = dueDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
+                                      (t.due.includes('T') ? ' ' + dueDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '');
+                        }
+                        return `
+                            <div class="border-b-2 border-black pb-3 mb-2">
+                                <div class="flex items-start gap-3 p-2 cursor-pointer hover:bg-gray-100 rounded" onclick="markTaskComplete('${currentTaskListId}', '${t.id}', this)">
+                                    <i class="ph ph-square text-3xl flex-shrink-0 mt-1"></i>
+                                    <div class="flex-1">
+                                        <div class="text-xl font-bold">${t.title}</div>
+                                        ${dueText ? `<div class="text-sm font-semibold opacity-60 mt-1">${dueText}</div>` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('') || "No tasks";
+                }
+            } catch (e) { console.error(e); }
         }
 
-        // BATTERY ENGINE
-        async function updateBattery() {
-            if ('getBattery' in navigator) {
-                const battery = await navigator.getBattery();
-                const updateUI = () => {
-                    const level = Math.round(battery.level * 100);
-                    document.getElementById('battery-percent').textContent = level + '%';
+        window.markTaskComplete = async (tasklistId, taskId, element) => {
+            try {
+                await gapi.client.tasks.tasks.update({
+                    'tasklist': tasklistId,
+                    'task': taskId,
+                    'status': 'completed'
+                });
+                // Update UI
+                const titleDiv = element.querySelector('.text-xl.font-bold');
+                const taskTitle = titleDiv ? titleDiv.textContent : 'Task';
+                const dueDiv = element.querySelector('.text-sm.font-semibold');
+                const dueText = dueDiv ? dueDiv.textContent : '';
 
-                    let iconName = 'battery';
-                    if (battery.charging) iconName = 'battery-charging';
-                    else if (battery.level <= 0.15) iconName = 'battery-low';
-                    else if (battery.level >= 0.9) iconName = 'battery-full';
-                    else if (battery.level <= 0.5) iconName = 'battery-medium';
+                element.innerHTML = `
+                    <i class="ph ph-check-square text-3xl flex-shrink-0 mt-1"></i>
+                    <div class="flex-1">
+                        <div class="text-xl font-bold line-through opacity-50">${taskTitle}</div>
+                        ${dueText ? `<div class="text-sm font-semibold opacity-30 mt-1">${dueText}</div>` : ''}
+                    </div>
+                `;
+                setTimeout(() => { element.parentElement.style.opacity = '0'; element.parentElement.style.transition = 'opacity 0.3s'; }, 500);
+            } catch (e) { console.error('Error marking task complete:', e); }
+        };
 
-                    document.getElementById('battery-icon-container').innerHTML = `<i data-lucide="${iconName}" class="w-8 h-8"></i>`;
-                    lucide.createIcons();
-                };
-                updateUI();
-                battery.addEventListener('levelchange', updateUI);
-                battery.addEventListener('chargingchange', updateUI);
-            } else {
-                document.getElementById('battery-status').classList.add('hidden');
-            }
-        }
-
-        function refreshAll() {
-            updateClock();
-            fetchWeather();
-            if (gapi.client?.getToken()) loadData();
-            updateBattery();
-        }
-
-        // CONFIG MANAGEMENT
-        function saveConfig() {
-            const c = {
-                owmKey: document.getElementById('owm-key').value,
-                clientId: document.getElementById('client-id').value,
-                email: document.getElementById('user-email').value,
-                lat: document.getElementById('lat').value,
-                lon: document.getElementById('lon').value
-            };
-            localStorage.setItem('einkConfig', JSON.stringify(c));
-            location.reload();
-        }
-
-        function generateSetupUrl() {
-            const c = {
-                owmKey: document.getElementById('owm-key').value,
-                clientId: document.getElementById('client-id').value,
-                email: document.getElementById('user-email').value,
-                lat: document.getElementById('lat').value,
-                lon: document.getElementById('lon').value
-            };
-            const encoded = btoa(JSON.stringify(c));
-            const url = window.location.href.split('#')[0] + '#config=' + encoded;
-            document.getElementById('setup-url-output').value = url;
-            document.getElementById('url-container').classList.remove('hidden');
-        }
-
-        function copySetupUrl() {
-            const el = document.getElementById('setup-url-output');
-            el.select();
-            document.execCommand('copy');
-            alert("Setup URL copied to clipboard.");
-        }
+        window.refreshDashboard = () => location.reload();
     </script>
-    <script async defer src="https://apis.google.com/js/api.js" onload="gapiLoaded()"></script>
-    <script async defer src="https://accounts.google.com/gsi/client" onload="gisLoaded()"></script>
 </body>
 </html>
